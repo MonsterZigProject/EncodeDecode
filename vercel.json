@@ -1,3 +1,8 @@
 {
-  "version": 2
+  "version": 2,
+  "functions": {
+    "api/decode.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
 }
