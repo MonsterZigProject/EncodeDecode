@@ -1,11 +1,7 @@
-// api/decode-tx.js
 const { Interface } = require("ethers");
 
 module.exports = async (req, res) => {
   try {
-    const abi = JSON.parse(process.env.ABI_JSON || "[]");
-    const iface = new Interface(abi);
-
     if (req.method !== "POST") {
       res.status(405).json({ error: "Use POST" });
       return;
@@ -15,43 +11,36 @@ module.exports = async (req, res) => {
     req.on("data", chunk => { body += chunk; });
     req.on("end", () => {
       try {
-        const { data } = JSON.parse(body);
-        if (!data) {
-          res.status(400).json({ error: "Provide data" });
+        const { functionName, data, abi: abiFromReq } = JSON.parse(body);
+
+        // Pakai ABI dari request jika ada, kalau tidak fallback ke ENV
+        const abi = abiFromReq || JSON.parse(process.env.ABI_JSON || "[]");
+        const iface = new Interface(abi);
+
+        if (!functionName || !data) {
+          res.status(400).json({ error: "Provide functionName and data" });
           return;
         }
 
-        // Parse tx data
-        const parsed = iface.parseTransaction({ data });
+        // Ambil definisi fungsi
+        const fnFragment = iface.getFunction(functionName);
 
-        // Dapatkan definisi fungsi dari ABI
-        const fnFragment = iface.getFunction(parsed.name);
+        // Decode hasil eth_call
+        const decoded = iface.decodeFunctionResult(fnFragment, data);
 
-        // Ambil semua argumen sesuai tipe
-        const formattedArgs = fnFragment.inputs.map((input, idx) => {
-          const value = parsed.args[idx];
-          // Kalau tipe tuple, convert ke array biasa
-          if (input.type.includes("tuple")) {
-            return Array.isArray(value) ? [...value] : value;
-          }
-          // Kalau tipe address, pastikan lowercase checksum
-          if (input.type === "address") {
-            return value.toString();
-          }
-          // Kalau tipe array, convert ke array biasa
-          if (input.type.endsWith("[]")) {
-            return Array.isArray(value) ? [...value] : value;
-          }
-          // Default: kembalikan nilai asli
+        // Auto-format output sesuai tipe ABI
+        const formattedArgs = fnFragment.outputs.map((output, idx) => {
+          const value = decoded[idx];
+          if (output.type.includes("tuple")) return Array.isArray(value) ? [...value] : value;
+          if (output.type === "address") return value.toString();
+          if (output.type.endsWith("[]")) return Array.isArray(value) ? [...value] : value;
           return value;
         });
 
-        // Bungkus jadi [[...]]
-        const nested = [formattedArgs];
-
+        // Bungkus ke [[...]] seperti [[address, comment]]
         res.status(200).json({
-          functionName: parsed.name,
-          args: nested
+          functionName,
+          args: [formattedArgs]
         });
       } catch (err) {
         res.status(500).json({ error: err.message });
