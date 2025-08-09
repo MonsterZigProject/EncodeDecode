@@ -1,11 +1,7 @@
 {
   "name": "EncodeDecode",
   "version": "1.0.0",
-  "description": "ABI eth_call",
-  "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod"
-  },
+  "type": "module",
   "dependencies": {
     "ethers": "^6.13.2"
   }
